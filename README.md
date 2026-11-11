@@ -162,7 +162,7 @@ Bounty Scout is a research agent with a spending limit, not a search box. The us
 
 The Kite-track piece is the audit trail: every paid call, every refusal, the list price, the amount actually charged, and the running total. When the session is exhausted or the next estimate would break the cap, spending stops and the digest still renders from what was already collected.
 
-The longer submission note is in [WRITEUP.md](WRITEUP.md). A public demo video and an X post are still required before the form at [openserv.typeform.com/submissions02](https://openserv.typeform.com/submissions02). Deadline: 15 November 2026, 23:59 UTC.
+The longer submission note is in [WRITEUP.md](WRITEUP.md). Demo video: https://youtu.be/0l6j0Rj_odI. X post: https://x.com/DoyDrop/status/2120436979464819135. Form: [openserv.typeform.com/submissions02](https://openserv.typeform.com/submissions02). Deadline: 15 November 2026, 23:59 UTC.
 
 ## Disclaimer
 

@@ -111,8 +111,8 @@ If a paid call fails with `session_not_found` (`No active session found for the 
 ## Demo and posts
 
 - Repo: https://github.com/doydrop/bounty-scout-agent
-- Demo video: _TODO, add the public URL before submitting._
-- X post: _TODO, add the URL before submitting._
+- Demo video: https://youtu.be/0l6j0Rj_odI
+- X post: https://x.com/DoyDrop/status/2120436979464819135
 - Submission form: https://openserv.typeform.com/submissions02
 - Deadline: 15 November 2026, 23:59 UTC (16 November, 06:59 WIB).
 
