@@ -20,6 +20,8 @@ export interface AppConfig {
   reasoningEffort: ReasoningEffort;
   kpassBin: string;
   kpassExists: boolean;
+  /** Working directory for every kpass spawn. Holds `.kite-passport/`. */
+  kpassCwd: string;
   kiteBaseUrl: string;
   kiteSessionId?: string;
   kiteMaxPerTx: number;
@@ -105,6 +107,12 @@ export function resolveMode(env: NodeJS.ProcessEnv, kpassExists: boolean): RunMo
   }
   if (hasKey && kpassExists) return "live";
   return "dry-run";
+}
+
+function resolveKpassCwd(value: string | undefined, root: string): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return root;
+  return path.resolve(root, trimmed);
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -225,6 +233,7 @@ export function loadConfig(
     reasoningEffort: effort as ReasoningEffort,
     kpassBin,
     kpassExists,
+    kpassCwd: resolveKpassCwd(merged.KPASS_CWD, root),
     kiteBaseUrl: (merged.KITE_PASSPORT_BASE_URL ?? "https://passport.prod.gokite.ai").replace(/\/$/, ""),
     kiteSessionId: readSessionId(dataDir, merged),
     kiteMaxPerTx: perTx,

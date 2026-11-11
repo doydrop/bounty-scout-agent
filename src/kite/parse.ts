@@ -68,6 +68,7 @@ export function toolIdFromUrl(url: string): string {
 
 export function txReferenceFrom(raw: Record<string, unknown>): string | undefined {
   const candidates = [
+    dig(raw, ["payment", "transaction_hash"]),
     dig(raw, ["payment", "payment_response", "reference"]),
     dig(raw, ["payment", "reference"]),
     dig(raw, ["txReference"]),
@@ -91,15 +92,43 @@ export function outcomeFromEnvelope(raw: Record<string, unknown>, merchantStatus
     errorCode === "idempotent_replay" ||
     hint.includes("replay");
   if (replayed && (status === "success" || status === undefined)) return "replayed";
-  if (errorCode && SESSION_STOP_CODES.has(errorCode)) return "session_exhausted";
+  // session_not_found stops the run but is still a failed call: nothing was paid.
+  if (errorCode && errorCode !== "session_not_found" && SESSION_STOP_CODES.has(errorCode)) {
+    return "session_exhausted";
+  }
   if (status && status !== "success") return "failed";
   if (merchantStatus >= 400) return "failed";
   return "paid";
 }
 
+const SESSION_NOT_FOUND = /no active session found/i;
+
+export function classifyKpassError(raw: Record<string, unknown>): {
+  errorCode?: string;
+  detail?: string;
+  /** status:error with neither payment nor usage. Nothing was spent. */
+  prePayment: boolean;
+} {
+  const status = asString(raw.status)?.toLowerCase();
+  const explicit = asString(raw.error_code) ?? asString(raw.errorCode);
+  const errorText = typeof raw.error === "string" ? asString(raw.error) : undefined;
+  let errorCode = explicit;
+  if (errorText && SESSION_NOT_FOUND.test(errorText)) errorCode = "session_not_found";
+  else if (!errorCode && status === "error") errorCode = "kpass_error";
+  const detail = asString(raw.hint) ?? asString(raw.user_message) ?? errorText;
+  const prePayment = status === "error" && !("payment" in raw) && !("payment_requirement" in raw) && !("usage" in raw);
+  return { errorCode, detail, prePayment };
+}
+
 export function merchantBody(raw: Record<string, unknown>): { status: number; body: unknown } {
   const x402 = asRecord(raw.x402);
-  const status = asNumber(x402?.status_code) ?? asNumber(x402?.statusCode) ?? 0;
+  const payment = asRecord(raw.payment);
+  const status =
+    asNumber(x402?.status_code) ??
+    asNumber(x402?.statusCode) ??
+    asNumber(payment?.status_code) ??
+    asNumber(payment?.statusCode) ??
+    0;
   if (!x402) return { status, body: null };
   if ("parsed_response_body" in x402 && x402.parsed_response_body !== undefined) {
     return { status, body: x402.parsed_response_body };
@@ -122,7 +151,8 @@ export function parseExecuteEnvelope(rawUnknown: unknown, req: PaidRequest, now 
   const policy = asRecord(dig(rawRecord, ["delegation", "payment_policy"]) as unknown);
   const x402 = asRecord(rawRecord.x402);
   const outcome = outcomeFromEnvelope(rawRecord, status);
-  const errorCode = asString(rawRecord.error_code) ?? asString(rawRecord.errorCode);
+  const classified = classifyKpassError(rawRecord);
+  const errorCode = classified.errorCode;
   const receipt: SpendReceipt = {
     id: `rct_${randomUUID()}`,
     ts: now.toISOString(),
@@ -140,7 +170,8 @@ export function parseExecuteEnvelope(rawUnknown: unknown, req: PaidRequest, now 
     txReference: txReferenceFrom(rawRecord),
     outcome,
     errorCode,
-    detail: asString(rawRecord.hint) ?? asString(rawRecord.user_message),
+    detail: classified.detail,
+    prePayment: classified.prePayment || undefined,
   };
   return {
     ok: outcome === "paid" || outcome === "replayed",

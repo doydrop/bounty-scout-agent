@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, parseCategories, parseChains, parseEntryCost } from "./config.js";
 import { createKiteSession, listActiveSessions } from "./kite/kpass.js";
@@ -65,19 +66,25 @@ function applyModeFlags(env: NodeJS.ProcessEnv, flags: { dryRun: boolean; live: 
   if (flags.live) env.SCOUT_MODE = "live";
 }
 
-function printReceiptLine(receipt: {
+export function formatReceiptLine(receipt: {
   outcome: string;
   tool: string;
   listPriceUsd?: number;
   paidAmount?: string;
   spentTotal?: string;
   errorCode?: string;
-}): void {
+  detail?: string;
+}): string {
   const paid = receipt.paidAmount ? `paid ${receipt.paidAmount}` : "paid -";
   const list = receipt.listPriceUsd === undefined ? "list -" : `list ${receipt.listPriceUsd}`;
   const total = receipt.spentTotal ? `total ${receipt.spentTotal}` : "total -";
   const code = receipt.errorCode ? ` ${receipt.errorCode}` : "";
-  console.log(`  ${receipt.outcome.padEnd(18)} ${receipt.tool.padEnd(12)} ${list.padEnd(12)} ${paid.padEnd(14)} ${total}${code}`);
+  const detail = receipt.detail ? ` ${receipt.detail}` : "";
+  return `  ${receipt.outcome.padEnd(18)} ${receipt.tool.padEnd(12)} ${list.padEnd(12)} ${paid.padEnd(14)} ${total}${code}${detail}`;
+}
+
+function printReceiptLine(receipt: Parameters<typeof formatReceiptLine>[0]): void {
+  console.log(formatReceiptLine(receipt));
 }
 
 async function cmdRun(argv: string[]): Promise<void> {
@@ -163,6 +170,7 @@ async function cmdSession(argv: string[]): Promise<void> {
       ttl: config.kiteTtl,
       assets: config.kiteAssets,
       bin: config.kpassBin,
+      cwd: config.kpassCwd,
       wait: values["no-wait"] !== true,
     });
     const payload = {
@@ -185,7 +193,7 @@ async function cmdSession(argv: string[]): Promise<void> {
       console.log(config.kiteSessionId ? `Configured session id: ${config.kiteSessionId}` : "No session id configured.");
       return;
     }
-    const listed = await listActiveSessions({ bin: config.kpassBin });
+    const listed = await listActiveSessions({ bin: config.kpassBin, cwd: config.kpassCwd });
     console.log(JSON.stringify(listed, null, 2));
     return;
   }
@@ -206,8 +214,11 @@ async function main(): Promise<void> {
   throw new Error(`Unknown command "${command}".\n${HELP}`);
 }
 
-main().catch((err: unknown) => {
-  const configKey = process.env.OPENSERV_API_KEY ?? process.env.SERV_API_KEY;
-  console.error(errorMessage(err, [configKey, process.env.KITE_AGENT_TOKEN].filter((value): value is string => Boolean(value))));
-  process.exitCode = 1;
-});
+const invokedDirectly = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err: unknown) => {
+    const configKey = process.env.OPENSERV_API_KEY ?? process.env.SERV_API_KEY;
+    console.error(errorMessage(err, [configKey, process.env.KITE_AGENT_TOKEN].filter((value): value is string => Boolean(value))));
+    process.exitCode = 1;
+  });
+}

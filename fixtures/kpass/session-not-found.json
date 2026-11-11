@@ -1,0 +1,4 @@
+{
+  "status": "error",
+  "error": "No active session found for the given session ID. Re-create and approve a session with 'kpass session create'."
+}

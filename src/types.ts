@@ -74,6 +74,11 @@ export interface SpendReceipt {
   errorCode?: string;
   /** Short human reason. Not part of the payment envelope. */
   detail?: string;
+  /**
+   * kpass returned status:error before any payment or usage object.
+   * The ledger does not debit these.
+   */
+  prePayment?: boolean;
 }
 
 export interface BudgetSnapshot {

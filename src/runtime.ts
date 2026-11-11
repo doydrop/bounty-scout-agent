@@ -64,6 +64,7 @@ function makeInner(config: AppConfig, sessionId: string, capUsd: number): KitePa
     bin: config.kpassBin,
     sessionId,
     capUsd,
+    cwd: config.kpassCwd,
   });
 }
 

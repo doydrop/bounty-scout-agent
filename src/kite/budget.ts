@@ -9,7 +9,8 @@ import { PayerError, SESSION_STOP_CODES } from "./types.js";
  * Hard spend cap for Agent402 calls.
  * A call is refused when listPrice + slack is greater than remaining,
  * or when listPrice is above the per-transaction cap.
- * Failed calls still debit (receipt amount, else the list price).
+ * A settled or unknown failure still debits. A kpass error that arrives
+ * before any payment or usage object does not.
  */
 export class BudgetLedger {
   spentMicro = 0;
@@ -74,12 +75,14 @@ export class BudgetLedger {
 
 export function debitMicroForReceipt(listPriceUsd: number, receipt: SpendReceipt): number {
   if (receipt.outcome === "skipped_budget" || receipt.outcome === "replayed") return 0;
+  if (receipt.prePayment) return 0;
   if (receipt.outcome === "session_exhausted") {
     const paid = parseUsd(receipt.paidAmount);
     return paid === null ? 0 : usdToMicro(paid);
   }
   const paid = parseUsd(receipt.paidAmount);
   if (paid !== null) return usdToMicro(paid);
+  // Timeouts and unparsable output have no envelope. Count the list price.
   return usdToMicro(listPriceUsd);
 }
 
@@ -195,7 +198,7 @@ export class BudgetedPayer implements KitePayer {
       ) {
         this.ledger.stopped = true;
         this.ledger.stopReason = result.receipt.errorCode ?? "session_exhausted";
-        if (result.receipt.outcome !== "session_exhausted") {
+        if (result.receipt.outcome === "paid" || result.receipt.outcome === "replayed") {
           result.receipt.outcome = "session_exhausted";
         }
       }
