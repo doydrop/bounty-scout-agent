@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { parseUsd } from "../money.js";
 import { stripSecrets } from "../secrets.js";
 import type { SpendOutcome, SpendReceipt } from "../types.js";
 import type { PaidRequest, PaidResult } from "./types.js";
@@ -115,7 +116,11 @@ export function classifyKpassError(raw: Record<string, unknown>): {
   let errorCode = explicit;
   if (errorText && SESSION_NOT_FOUND.test(errorText)) errorCode = "session_not_found";
   else if (!errorCode && status === "error") errorCode = "kpass_error";
-  const detail = asString(raw.hint) ?? asString(raw.user_message) ?? errorText;
+  let detail = asString(raw.hint) ?? asString(raw.user_message) ?? errorText;
+  if (errorCode === "session_not_found") {
+    const next = "Run `pnpm scout session status` to store the session key, then retry.";
+    detail = detail ? `${detail} ${next}` : next;
+  }
   const prePayment = status === "error" && !("payment" in raw) && !("payment_requirement" in raw) && !("usage" in raw);
   return { errorCode, detail, prePayment };
 }
@@ -196,6 +201,11 @@ function firstString(record: Record<string, unknown>, keys: string[]): string | 
   return undefined;
 }
 
+/** Request ids are not session ids. kpass uses both `asr_…` and `agent_session_req_…`. */
+export function isSessionRequestId(value: string): boolean {
+  return value.startsWith("asr_") || value.startsWith("agent_session_req_");
+}
+
 export function parseSessionPayload(value: unknown): SessionCreateInfo {
   const root = asRecord(value) ?? {};
   const nested = asRecord(root.data) ?? asRecord(root.session) ?? asRecord(root.result) ?? {};
@@ -204,13 +214,69 @@ export function parseSessionPayload(value: unknown): SessionCreateInfo {
   let requestId: string | undefined;
   let approvalUrl: string | undefined;
   for (const source of sources) {
-    sessionId ??= firstString(source, ["session_id", "sessionId", "id"]);
+    sessionId ??= firstString(source, ["current_session_id", "currentSessionId"]);
     requestId ??= firstString(source, ["request_id", "requestId"]);
     approvalUrl ??= firstString(source, ["approval_url", "approvalUrl", "url", "approve_url"]);
+    const rawSession = firstString(source, ["session_id", "sessionId"]);
+    if (rawSession && isSessionRequestId(rawSession)) requestId ??= rawSession;
+    else sessionId ??= rawSession;
+    const rawId = firstString(source, ["id"]);
+    if (rawId && isSessionRequestId(rawId)) requestId ??= rawId;
+    else if (!sessionId) sessionId ??= rawId;
   }
-  if (sessionId && sessionId.startsWith("asr_")) {
+  if (sessionId && isSessionRequestId(sessionId)) {
     requestId ??= sessionId;
     sessionId = undefined;
   }
   return { sessionId, requestId, approvalUrl };
+}
+
+export interface SessionAccounting {
+  spentUsd?: number;
+  maxTotalUsd?: number;
+}
+
+function spendFields(record: Record<string, unknown>): { spentUsd?: number; maxTotalUsd?: number } {
+  const usage = asRecord(record.usage);
+  const policy =
+    asRecord(dig(record, ["delegation", "payment_policy"]) as unknown) ??
+    asRecord(record.payment_policy);
+  const spent = parseUsd(asString(usage?.spent_total) ?? asString(usage?.spentTotal));
+  const max = parseUsd(asString(policy?.max_total_amount) ?? asString(policy?.maxTotalAmount));
+  return {
+    spentUsd: spent === null ? undefined : spent,
+    maxTotalUsd: max === null ? undefined : max,
+  };
+}
+
+/** Read settled session spend from a kpass status or list payload. Ignores receipt logs. */
+export function accountingFromSessionPayload(value: unknown, sessionId?: string): SessionAccounting {
+  let matched: SessionAccounting = {};
+  let fallback: SessionAccounting = {};
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    const id =
+      asString(record.current_session_id) ??
+      asString(record.currentSessionId) ??
+      asString(record.session_id) ??
+      asString(record.sessionId);
+    const fields = spendFields(record);
+    if (fields.spentUsd !== undefined || fields.maxTotalUsd !== undefined) {
+      if (!fallback.spentUsd && fields.spentUsd !== undefined) fallback = { ...fallback, ...fields };
+      else if (fallback.maxTotalUsd === undefined && fields.maxTotalUsd !== undefined) {
+        fallback = { ...fallback, maxTotalUsd: fields.maxTotalUsd };
+      }
+      if (sessionId && id === sessionId) matched = { ...matched, ...fields };
+    }
+    for (const inner of Object.values(record)) {
+      if (inner && typeof inner === "object") visit(inner);
+    }
+  };
+  visit(value);
+  return sessionId && (matched.spentUsd !== undefined || matched.maxTotalUsd !== undefined) ? matched : fallback;
 }

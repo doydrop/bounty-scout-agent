@@ -18,7 +18,7 @@ Bounty Scout uses a **separate Kite Passport spending session**, not a raw walle
 - 1 hour TTL
 - USDC
 
-Every paid lookup goes through `kpass session execute` with an idempotency key. The CLI wrapper does not interpolate the command in a shell, and it always uses the same working directory (`KPASS_CWD`, default the repo root) so the `.kite-passport/` session created by `kpass session create` is the one `execute` reads. If the session is exhausted, expired, missing from that directory, or the next list price plus a $0.01 slack would exceed what is left, the process stops spending and still scores what it already has. A settled failure counts against the cap. A `kpass` error that returns before any payment does not.
+Every paid lookup goes through `kpass session execute` with an idempotency key. The CLI wrapper does not interpolate the command in a shell. `KPASS_CWD` picks the directory that holds `.kite-passport/`; when it is unset, the repo root is used if that directory is already there, otherwise `$HOME`, so a normal `kpass login` is found. `pnpm scout session create` prints the approval URL and waits up to 300 seconds so `kpass session status --request-id` can store the per-session key. If the session is exhausted, expired, missing, or the next list price plus a $0.01 slack would exceed what is left, the process stops spending and still scores what it already has. A settled failure counts against the cap. A `kpass` error that returns before any payment does not, and it does not shrink the cap.
 
 That receipt table is the product: time, tool, URL, list price, amount actually paid, running total, merchant status, and a transaction reference when Passport returns one.
 
@@ -100,10 +100,13 @@ pnpm install
 pnpm scout run                  # dry-run, no key needed
 pnpm scout serve --port 8787    # local dashboard
 
-# live mode: OPENSERV_API_KEY, kpass on PATH, and an approved session
+# live: kpass login, fund the wallet, then approve in the browser.
+# session create waits up to 300s and writes the session id.
 pnpm scout session create
 pnpm scout run --live --chains solana --budget 0.2 --entry free_or_gas --max-effort 30
 ```
+
+If a paid call fails with `session_not_found` (`No active session found for the given session ID`), the per-session key was not stored yet. Run `pnpm scout session status` and retry. That command is safe to repeat. It does not spend.
 
 ## Demo and posts
 

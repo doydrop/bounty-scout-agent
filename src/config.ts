@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BountyCategory, EntryCost, ScoutCriteria } from "./types.js";
@@ -20,8 +21,11 @@ export interface AppConfig {
   reasoningEffort: ReasoningEffort;
   kpassBin: string;
   kpassExists: boolean;
-  /** Working directory for every kpass spawn. Holds `.kite-passport/`. */
-  kpassCwd: string;
+  /**
+   * Working directory for every kpass spawn. Undefined means the process cwd.
+   * kpass reads `.kite-passport/` from this directory.
+   */
+  kpassCwd?: string;
   kiteBaseUrl: string;
   kiteSessionId?: string;
   kiteMaxPerTx: number;
@@ -109,10 +113,16 @@ export function resolveMode(env: NodeJS.ProcessEnv, kpassExists: boolean): RunMo
   return "dry-run";
 }
 
-function resolveKpassCwd(value: string | undefined, root: string): string {
+/**
+ * Explicit KPASS_CWD wins. Otherwise use the repo root when it already has
+ * `.kite-passport/`. If it does not, use $HOME so a normal `kpass` login
+ * (`~/.kite-passport`) is found. Undefined leaves the process cwd unchanged.
+ */
+export function resolveKpassCwd(value: string | undefined, root: string, home = homedir()): string | undefined {
   const trimmed = value?.trim();
-  if (!trimmed) return root;
-  return path.resolve(root, trimmed);
+  if (trimmed) return path.resolve(root, trimmed);
+  if (existsSync(path.join(root, ".kite-passport"))) return root;
+  return home.trim() ? home : undefined;
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -275,7 +285,7 @@ export function assertLiveRunReady(config: AppConfig): void {
   }
   if (!config.kiteSessionId || config.kiteSessionId === "sess_dry_run") {
     throw new Error(
-      "Live mode needs an approved Kite session. Set KITE_SESSION_ID or run: pnpm scout session create",
+      "Live mode needs an approved Kite session. Run: pnpm scout session create, then pnpm scout session status.",
     );
   }
   if (config.kitePayer === "http" && !config.kiteAgentToken) {

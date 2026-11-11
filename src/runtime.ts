@@ -1,8 +1,11 @@
 import path from "node:path";
-import { BudgetedPayer, BudgetLedger } from "./kite/budget.js";
+import { BudgetedPayer, BudgetLedger, runCapUsd } from "./kite/budget.js";
 import { PassportHttpPayer } from "./kite/http.js";
-import { KpassCliPayer } from "./kite/kpass.js";
+import { KpassCliPayer, listActiveSessions } from "./kite/kpass.js";
 import { FixturePayer, loadDryRunFixture } from "./kite/mock.js";
+import { accountingFromSessionPayload } from "./kite/parse.js";
+import { activateStoredSession } from "./kite/session-store.js";
+import { usdToMicro } from "./money.js";
 import type { KitePayer } from "./kite/types.js";
 import { saveRun } from "./scout/digest.js";
 import { runScout } from "./scout/runner.js";
@@ -76,19 +79,58 @@ function makeServ(config: AppConfig): ServClient {
   return createLiveServClient(config);
 }
 
+async function liveSessionNumbers(config: AppConfig, userBudgetUsd: number): Promise<{
+  capUsd: number;
+  sessionMaxUsd: number;
+  sessionSpentUsd: number;
+}> {
+  let spent = 0;
+  let max = config.kiteMaxTotal;
+  if (config.mode === "live" && config.kiteSessionId && config.kitePayer === "kpass") {
+    try {
+      const listed = await listActiveSessions({ bin: config.kpassBin, cwd: config.kpassCwd });
+      const accounting = accountingFromSessionPayload(listed, config.kiteSessionId);
+      if (accounting.spentUsd !== undefined) spent = accounting.spentUsd;
+      if (accounting.maxTotalUsd !== undefined) max = accounting.maxTotalUsd;
+    } catch {
+      // A list failure must not change the cap. Unpaid receipts are not a spend source.
+    }
+  }
+  const ceiling = Math.min(userBudgetUsd, max);
+  return { capUsd: ceiling, sessionMaxUsd: max, sessionSpentUsd: Math.min(spent, max) };
+}
+
 export function createRuntime(config: AppConfig): Runtime {
   const serv = makeServ(config);
   return {
     config,
     serv,
     async run(overrides, signal, onReceipt) {
-      if (config.mode === "live") assertLiveRunReady(config);
+      if (config.mode === "live") {
+        const activated = await activateStoredSession({
+          dataDir: config.dataDir,
+          bin: config.kpassBin,
+          cwd: config.kpassCwd,
+          fallbackSessionId: config.kiteSessionId,
+        });
+        if (activated.sessionId) config.kiteSessionId = activated.sessionId;
+        try {
+          assertLiveRunReady(config);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(`${message} If approval already happened, run: pnpm scout session status`);
+        }
+      }
       const criteria = criteriaFrom(config, overrides);
-      const capUsd = Math.min(criteria.budgetUsd, config.kiteMaxTotal);
-      const perTxUsd = Math.min(config.kiteMaxPerTx, capUsd);
-      const ledger = BudgetLedger.fromUsd(capUsd, perTxUsd, config.slackUsd);
+      const numbers = await liveSessionNumbers(config, criteria.budgetUsd);
+      if (numbers.capUsd - numbers.sessionSpentUsd <= 0) {
+        throw new Error("The Passport session has no remaining budget. usage.spent_total has reached the session max.");
+      }
+      const perTxUsd = Math.min(config.kiteMaxPerTx, numbers.capUsd);
+      const ledger = BudgetLedger.fromUsd(numbers.capUsd, perTxUsd, config.slackUsd);
+      if (numbers.sessionSpentUsd > 0) ledger.spentMicro = usdToMicro(numbers.sessionSpentUsd);
       const sessionId = config.mode === "dry-run" ? config.kiteSessionId ?? "sess_dry_run" : config.kiteSessionId;
-      const payer = new BudgetedPayer(makeInner(config, sessionId ?? "", capUsd), ledger, { sessionId });
+      const payer = new BudgetedPayer(makeInner(config, sessionId ?? "", numbers.capUsd), ledger, { sessionId });
       const record = await runScout({
         mode: config.mode,
         servModel: config.mode === "dry-run" ? `${config.servModel} (fixture)` : config.servModel,
@@ -106,6 +148,7 @@ export function createRuntime(config: AppConfig): Runtime {
         slackUsd: config.slackUsd,
         perTxUsd,
         hostAllowlist: config.hostAllowlist,
+        sessionMaxUsd: numbers.sessionMaxUsd,
         timeoutMs: config.runTimeoutMs,
         signal,
         onReceipt,

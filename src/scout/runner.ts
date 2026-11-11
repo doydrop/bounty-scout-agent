@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { BudgetLedger, blankReceipt } from "../kite/budget.js";
 import type { KitePayer, PaidRequest, PaidResult } from "../kite/types.js";
-import { formatAmount } from "../money.js";
+import { formatAmount, formatUsd } from "../money.js";
 import { errorMessage } from "../secrets.js";
 import type { ServClient } from "../serv/client.js";
 import type { PlanCall, Selection } from "../serv/schemas.js";
@@ -38,6 +38,8 @@ export interface RunScoutInput {
   slackUsd: number;
   perTxUsd: number;
   hostAllowlist: string[];
+  /** Passport session max. Shown as "session opened". Defaults to the ledger ceiling. */
+  sessionMaxUsd?: number;
   timeoutMs: number;
   signal?: AbortSignal;
   now?: () => Date;
@@ -138,8 +140,12 @@ export async function runScout(input: RunScoutInput): Promise<RunRecord> {
     maxSearches: input.maxSearches,
     allowAnswer: input.allowAnswer,
   });
-  if (plan.maxPaidUsd > 0) input.ledger.tightenCapUsd(plan.maxPaidUsd);
   decisions.push(plan.rationale);
+  if (plan.maxPaidUsd > 0 && plan.maxPaidUsd + 1e-9 < input.ledger.capUsd()) {
+    decisions.push(
+      `Planner suggested spending at most ${formatUsd(plan.maxPaidUsd)}. The cap stays ${formatUsd(input.ledger.capUsd())} and is not reduced by unpaid receipts.`,
+    );
+  }
 
   for (const rejected of plan.rejected) {
     const tool = toolById(rejected.tool);
@@ -419,7 +425,7 @@ export async function runScout(input: RunScoutInput): Promise<RunRecord> {
     dropped,
     budget: {
       capUsd: input.ledger.capUsd(),
-      sessionCapUsd: openedCapUsd,
+      sessionCapUsd: input.sessionMaxUsd ?? openedCapUsd,
       spentUsd: input.ledger.spentUsd(),
       remainingUsd: input.ledger.remainingUsd(),
       perTxCapUsd: input.perTxUsd,

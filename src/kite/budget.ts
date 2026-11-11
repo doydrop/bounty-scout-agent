@@ -73,9 +73,47 @@ export class BudgetLedger {
   }
 }
 
+/**
+ * Stable ceiling for one run: the lower of the user budget and the session max.
+ * Settled session spend reduces remaining, not this ceiling. Unpaid receipts
+ * (prePayment, skipped_budget, planner_rejected) are not an input.
+ */
+export function runCapUsd(input: {
+  userBudgetUsd: number;
+  sessionMaxUsd: number;
+  sessionSpentUsd?: number;
+}): number {
+  const spent = input.sessionSpentUsd ?? 0;
+  const room = Math.max(0, input.sessionMaxUsd - spent);
+  return Math.min(input.userBudgetUsd, room);
+}
+
+/** True when this receipt must not debit or reserve budget. */
+export function isUnchargedReceipt(receipt: SpendReceipt): boolean {
+  if (receipt.outcome === "skipped_budget" || receipt.outcome === "replayed") return true;
+  if (receipt.prePayment) return true;
+  if (receipt.errorCode === "planner_rejected" || receipt.errorCode === "session_not_found") return true;
+  return false;
+}
+
+/**
+ * Move the ledger by this receipt.
+ * `usage.spent_total` is the session's absolute settled total, so it replaces
+ * the local sum instead of being added again. Uncharged receipts do nothing.
+ */
+export function applyReceiptSpend(ledger: BudgetLedger, listPriceUsd: number, receipt: SpendReceipt): void {
+  if (isUnchargedReceipt(receipt)) return;
+  const absolute = parseUsd(receipt.spentTotal);
+  if (absolute !== null) {
+    const micro = usdToMicro(absolute);
+    if (micro > ledger.spentMicro) ledger.spentMicro = micro;
+    return;
+  }
+  ledger.debit(debitMicroForReceipt(listPriceUsd, receipt));
+}
+
 export function debitMicroForReceipt(listPriceUsd: number, receipt: SpendReceipt): number {
-  if (receipt.outcome === "skipped_budget" || receipt.outcome === "replayed") return 0;
-  if (receipt.prePayment) return 0;
+  if (isUnchargedReceipt(receipt)) return 0;
   if (receipt.outcome === "session_exhausted") {
     const paid = parseUsd(receipt.paidAmount);
     return paid === null ? 0 : usdToMicro(paid);
@@ -187,8 +225,7 @@ export class BudgetedPayer implements KitePayer {
 
     try {
       const result = await this.inner.execute(req);
-      const debit = debitMicroForReceipt(tool.listPriceUsd, result.receipt);
-      this.ledger.debit(debit);
+      applyReceiptSpend(this.ledger, tool.listPriceUsd, result.receipt);
       result.receipt.tool = tool.id;
       result.receipt.listPriceUsd ??= tool.listPriceUsd;
       result.receipt.sessionId ??= req.sessionId ?? this.opts.sessionId;

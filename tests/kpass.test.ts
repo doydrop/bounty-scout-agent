@@ -103,6 +103,10 @@ describe("kpass CLI payer", () => {
     assert.equal(create[create.indexOf("--max-total-amount") + 1], "0.25");
     assert.equal(create[create.indexOf("--ttl") + 1], "1h");
     assert.equal(create.includes("--no-browser"), true);
+    const status = seen[1] ?? [];
+    assert.ok(status.includes("--wait"));
+    assert.equal(status[status.indexOf("--timeout") + 1], "300");
+    assert.equal(status[status.indexOf("--request-id") + 1], "asr_demo");
     assert.equal(info.sessionId, "sess_approved");
     assert.match(info.approvalUrl ?? "", /approve\?token=/);
     assert.deepEqual(cwds, ["/repo", "/repo"]);
