@@ -70,6 +70,13 @@ web_modules/
 .env.*
 !.env.example
 
+# Kite Passport local login and session secrets
+.kite-passport/
+**/.kite-passport/
+
+# Scout run output (receipts, digests, session ids)
+data/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

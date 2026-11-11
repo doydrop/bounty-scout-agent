@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'"
+    />
+    <title>Bounty Scout</title>
+    <style>
+      :root {
+        --bg: #12140f;
+        --paper: #1c2116;
+        --paper-2: #242a1c;
+        --ink: #f4f1e4;
+        --muted: #c9d0b8;
+        --line: #343b2a;
+        --lime: #dff25a;
+        --lime-ink: #1a2208;
+        --warn: #ffb020;
+        --bad: #ff6b4a;
+        --good: #9be7a8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(1200px 500px at 10% -10%, #2a3318 0%, transparent 55%),
+          var(--bg);
+        color: var(--ink);
+        font: 16px/1.45 "Avenir Next", "Segoe UI", sans-serif;
+      }
+      header, main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-end;
+        padding: 28px 0 12px;
+      }
+      .kicker {
+        margin: 0 0 4px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-size: 12px;
+        color: var(--lime);
+      }
+      h1 {
+        margin: 0;
+        font-family: "Iowan Old Style", Palatino, Georgia, serif;
+        font-weight: 600;
+        font-size: 42px;
+        letter-spacing: -0.03em;
+      }
+      .badge {
+        border: 1px solid var(--lime);
+        color: var(--lime);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+      }
+      .badge.live { border-color: var(--warn); color: var(--warn); }
+      .banner {
+        display: none;
+        margin: 8px 0 0;
+        padding: 10px 12px;
+        background: #3a2a12;
+        color: var(--warn);
+        border-radius: 10px;
+      }
+      .banner.show { display: block; }
+      .budget {
+        margin-top: 8px;
+        padding: 16px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+      }
+      .budget-top, .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .meter {
+        margin-top: 10px;
+        height: 14px;
+        background: #0d0f0b;
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+      }
+      .meter > span { display: block; height: 100%; width: 0; background: var(--lime); }
+      .nums { margin: 8px 0 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-top: 16px; }
+      form, .panel, .card, table {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+      }
+      form, .panel { padding: 14px; }
+      label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 13px; }
+      input, select {
+        width: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+      }
+      .actions { display: flex; gap: 8px; margin-top: 14px; }
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+      button.primary { background: var(--lime); color: var(--lime-ink); font-weight: 700; }
+      button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .cards { display: grid; gap: 12px; }
+      .card { padding: 14px 16px; }
+      .card h2 { margin: 0 0 6px; font-size: 22px; font-family: "Iowan Old Style", Palatino, Georgia, serif; }
+      .meta { color: var(--muted); font-size: 14px; }
+      .score {
+        float: right;
+        background: var(--lime);
+        color: var(--lime-ink);
+        font-weight: 800;
+        border-radius: 10px;
+        padding: 6px 8px;
+        font-variant-numeric: tabular-nums;
+      }
+      .bars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+      .bars div { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+      .bars i {
+        display: block;
+        height: 6px;
+        margin-top: 4px;
+        background: #0d0f0b;
+        border-radius: 99px;
+        overflow: hidden;
+      }
+      .bars i span { display: block; height: 100%; background: var(--good); }
+      details { margin-top: 8px; }
+      summary { cursor: pointer; color: var(--muted); }
+      a { color: var(--lime); }
+      .dropped { margin-top: 16px; }
+      .dropped li { margin: 6px 0; }
+      table { width: 100%; border-collapse: collapse; margin: 16px 0 28px; overflow: hidden; }
+      th, td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 12px;
+        vertical-align: top;
+      }
+      th { color: var(--muted); font-weight: 600; }
+      td.url { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      tr.skipped td { color: var(--muted); }
+      tr.failed td { color: var(--bad); }
+      .empty { color: var(--muted); padding: 8px 0; }
+      footer { color: var(--muted); font-size: 13px; padding: 0 0 32px; }
+      @media (max-width: 800px) {
+        .layout { grid-template-columns: 1fr; }
+        h1 { font-size: 34px; }
+        .bars { grid-template-columns: repeat(2, 1fr); }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="kicker">SERV Hackathon 02 · Kite track</p>
+        <h1>Bounty Scout</h1>
+      </div>
+      <div class="badge" id="mode">…</div>
+    </header>
+    <main>
+      <p class="banner" id="banner" role="status"></p>
+      <section class="budget" aria-label="Budget">
+        <div class="budget-top">
+          <strong id="spent-label">Spent</strong>
+          <span id="cap-label"></span>
+        </div>
+        <div class="meter" aria-hidden="true"><span id="meter"></span></div>
+        <p class="nums" id="budget-nums"></p>
+      </section>
+      <div class="layout">
+        <form id="form">
+          <label for="chains">Chains</label>
+          <input id="chains" name="chains" value="solana" />
+          <label for="entry">Entry cost</label>
+          <select id="entry" name="entryCost">
+            <option value="free_or_gas">Free or gas only</option>
+            <option value="any">Any, including paid entry</option>
+          </select>
+          <label for="categories">Categories</label>
+          <input id="categories" name="categories" value="contest,creative,defi,gigs" />
+          <label for="effort">Max effort (minutes)</label>
+          <input id="effort" name="maxEffortMinutes" type="number" min="1" value="30" />
+          <label for="budget">Tool budget (USD)</label>
+          <input id="budget" name="budgetUsd" type="number" min="0.01" step="0.01" value="0.25" />
+          <label for="notes">Notes</label>
+          <input id="notes" name="extraNotes" placeholder="Optional" />
+          <div class="actions">
+            <button class="primary" id="run" type="submit">Run</button>
+            <button class="ghost" id="stop" type="button">Stop</button>
+          </div>
+        </form>
+        <section class="panel">
+          <h2 style="margin: 0 0 8px; font-size: 18px">Spend decisions</h2>
+          <p class="meta" id="summary">Run a scout to plan paid lookups under the cap.</p>
+          <ul id="decisions"></ul>
+          <p class="meta" id="warnings"></p>
+        </section>
+      </div>
+      <section class="cards" id="cards" aria-live="polite"></section>
+      <section class="dropped panel" id="dropped-wrap" hidden>
+        <h2 style="margin: 0 0 8px; font-size: 18px">Dropped</h2>
+        <ul id="dropped"></ul>
+      </section>
+      <h2 style="margin: 22px 0 8px; font-family: Palatino, Georgia, serif">Receipts</h2>
+      <div style="overflow-x: auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Tool</th>
+              <th>URL</th>
+              <th>List</th>
+              <th>Paid</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Tx / reason</th>
+            </tr>
+          </thead>
+          <tbody id="receipts"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="receipt-empty">No receipts yet.</p>
+      <footer>
+        Scores are assistive. Listings can be scams. This agent does not apply and does not send funds to a bounty.
+        Dry-run receipts are fixtures. SERV plans and scores; Kite Passport is what pays for Agent402 calls.
+      </footer>
+    </main>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let polling = null;
+
+      function el(tag, text) {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+      function safeLink(href, label) {
+        const a = document.createElement("a");
+        try {
+          const url = new URL(href);
+          if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("bad");
+          a.href = url.toString();
+        } catch {
+          a.removeAttribute("href");
+        }
+        a.target = "_blank";
+        a.rel = "noreferrer noopener";
+        a.textContent = label;
+        return a;
+      }
+      function money(n) {
+        if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+        return `$${n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`;
+      }
+      function clear(node) {
+        while (node.firstChild) node.removeChild(node.firstChild);
+      }
+
+      function render(state) {
+        const live = state.mode === "live";
+        $("mode").textContent = live ? "LIVE" : "DRY RUN";
+        $("mode").className = live ? "badge live" : "badge";
+        const banner = $("banner");
+        const stopped = state.stoppedReason || state.digest?.stoppedReason;
+        if (state.error) {
+          banner.textContent = state.error;
+          banner.className = "banner show";
+        } else if (stopped) {
+          banner.textContent = `Spending stopped (${stopped}). The last digest stays visible.`;
+          banner.className = "banner show";
+        } else if (state.running) {
+          banner.textContent = "Run in progress. Receipts update as each paid call returns.";
+          banner.className = "banner show";
+        } else {
+          banner.className = "banner";
+          banner.textContent = "";
+        }
+        const budget = state.digest?.budget || state.budget;
+        const cap = budget.capUsd || 0;
+        const spent = budget.spentUsd || 0;
+        const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
+        $("meter").style.width = `${pct}%`;
+        $("spent-label").textContent = `Spent ${money(spent)}`;
+        $("cap-label").textContent = `Cap ${money(cap)}`;
+        $("budget-nums").textContent = `Remaining ${money(budget.remainingUsd)} · per tx ${money(budget.perTxCapUsd)} · slack ${money(budget.slackUsd)} · session opened ${money(budget.sessionCapUsd)}`;
+        $("run").disabled = state.running;
+        $("summary").textContent = state.digest?.summary || (state.running ? "Planning searches…" : "Run a scout to plan paid lookups under the cap.");
+        const decisions = $("decisions");
+        clear(decisions);
+        for (const line of state.digest?.decisions || []) decisions.appendChild(el("li", line));
+        $("warnings").textContent = (state.digest?.warnings || []).join(" ");
+        const cards = $("cards");
+        clear(cards);
+        for (const item of state.digest?.opportunities || []) {
+          const card = el("article");
+          card.className = "card";
+          const score = el("div", item.scores.overall.toFixed(2));
+          score.className = "score";
+          card.appendChild(score);
+          card.appendChild(el("h2", item.title));
+          const meta = el("p");
+          meta.className = "meta";
+          meta.append(
+            `${item.chain || "chain n/a"} · ${item.category || "category n/a"} · ${item.rewardText || "reward n/a"}`,
+            el("br"),
+            `Deadline ${item.deadline || "n/a"} · ~${item.effortMinutesEstimate ?? "?"} min · ${item.entryCostText || "entry n/a"}`,
+          );
+          card.appendChild(meta);
+          card.appendChild(safeLink(item.url, item.sourceHost || item.url));
+          const bars = el("div");
+          bars.className = "bars";
+          for (const key of ["effort", "cost", "reward", "deadline", "legitimacy"]) {
+            const cell = el("div", key);
+            const track = document.createElement("i");
+            const fill = document.createElement("span");
+            fill.style.width = `${Math.max(0, Math.min(10, item.scores[key])) * 10}%`;
+            track.appendChild(fill);
+            cell.appendChild(track);
+            bars.appendChild(cell);
+          }
+          card.appendChild(bars);
+          const details = document.createElement("details");
+          details.appendChild(el("summary", "Rationale and evidence"));
+          details.appendChild(el("p", item.rationale));
+          if (item.rewardUsdEstimate !== undefined) {
+            details.appendChild(el("p", `Model reward estimate ${money(item.rewardUsdEstimate)} — not a quote.`));
+          }
+          details.appendChild(el("p", `Receipts: ${(item.evidenceReceiptIds || []).join(", ") || "none"}`));
+          card.appendChild(details);
+          cards.appendChild(card);
+        }
+        const dropped = state.digest?.dropped || [];
+        $("dropped-wrap").hidden = dropped.length === 0;
+        const droppedList = $("dropped");
+        clear(droppedList);
+        for (const item of dropped) {
+          const li = el("li");
+          li.append(`${item.title} — `, safeLink(item.url, item.url), ` ${item.reason}`);
+          droppedList.appendChild(li);
+        }
+        const body = $("receipts");
+        clear(body);
+        const receipts = state.receipts || [];
+        $("receipt-empty").hidden = receipts.length > 0;
+        for (const receipt of receipts) {
+          const tr = document.createElement("tr");
+          if (receipt.outcome === "skipped_budget" || receipt.outcome === "replayed") tr.className = "skipped";
+          if (receipt.outcome === "failed" || receipt.outcome === "session_exhausted") tr.className = "failed";
+          const cells = [
+            receipt.ts?.replace("T", " ").replace("Z", "") || "",
+            receipt.tool,
+            receipt.url,
+            receipt.listPriceUsd === undefined ? "" : money(receipt.listPriceUsd),
+            receipt.paidAmount || "",
+            receipt.spentTotal || "",
+            `${receipt.outcome}${receipt.merchantStatus ? " " + receipt.merchantStatus : ""}`,
+            receipt.txReference || receipt.errorCode || receipt.detail || "",
+          ];
+          cells.forEach((value, index) => {
+            const td = el("td", value);
+            if (index === 2) td.className = "url";
+            td.title = String(value);
+            tr.appendChild(td);
+          });
+          body.appendChild(tr);
+        }
+        if (!state.running && state.digest?.criteria) {
+          $("chains").value = state.digest.criteria.chains.join(",");
+          $("entry").value = state.digest.criteria.entryCost;
+          $("categories").value = state.digest.criteria.categories.join(",");
+          $("effort").value = String(state.digest.criteria.maxEffortMinutes);
+          $("budget").value = String(state.digest.criteria.budgetUsd);
+          $("notes").value = state.digest.criteria.extraNotes || "";
+        }
+      }
+
+      async function refresh() {
+        const res = await fetch("/api/state");
+        const state = await res.json();
+        render(state);
+        return state;
+      }
+
+      function watch() {
+        if (polling) return;
+        polling = setInterval(async () => {
+          const state = await refresh();
+          if (!state.running && polling) {
+            clearInterval(polling);
+            polling = null;
+          }
+        }, 400);
+      }
+
+      $("form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const state = await refresh();
+        if (state.mode === "live") {
+          const budget = $("budget").value;
+          const ok = window.confirm(`Run a live scout? Paid Agent402 calls will use the Kite session, capped around $${budget}.`);
+          if (!ok) return;
+        }
+        const body = {
+          chains: $("chains").value,
+          entryCost: $("entry").value,
+          categories: $("categories").value,
+          maxEffortMinutes: Number($("effort").value),
+          budgetUsd: Number($("budget").value),
+          extraNotes: $("notes").value,
+        };
+        const res = await fetch("/api/run", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({ error: res.statusText }));
+          $("banner").textContent = payload.error || "Run failed to start.";
+          $("banner").className = "banner show";
+          return;
+        }
+        watch();
+        await refresh();
+      });
+      $("stop").addEventListener("click", async () => {
+        await fetch("/api/stop", { method: "POST" });
+        await refresh();
+      });
+      refresh().catch((err) => {
+        $("banner").textContent = err instanceof Error ? err.message : "Could not load state.";
+        $("banner").className = "banner show";
+      });
+    </script>
+    <noscript>This dashboard needs JavaScript to load the local digest and receipts.</noscript>
+  </body>
+</html>

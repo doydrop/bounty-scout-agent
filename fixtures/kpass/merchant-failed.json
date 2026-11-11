@@ -1,0 +1,17 @@
+{
+  "status": "success",
+  "error_code": "merchant_failed_held",
+  "session_id": "sess_test",
+  "session_status": "active",
+  "usage": { "spent_total": "0.01", "reserved_total": "0" },
+  "delegation": {
+    "payment_policy": { "max_total_amount": "0.25", "max_amount_per_tx": "0.05" }
+  },
+  "payment_requirement": { "asset": "USDC", "amount": "0.01" },
+  "x402": {
+    "status_code": 502,
+    "parsed_response_body": { "error": "bad gateway" },
+    "chain_id": 2366
+  },
+  "hint": "settled but the merchant failed; do not retry with a new key"
+}
