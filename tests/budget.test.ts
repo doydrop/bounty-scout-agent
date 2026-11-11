@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BudgetedPayer, BudgetLedger, debitMicroForReceipt } from "../src/kite/budget.js";
+import { BudgetedPayer, BudgetLedger, applyReceiptSpend, debitMicroForReceipt, isUnchargedReceipt, runCapUsd } from "../src/kite/budget.js";
 import type { KitePayer, PaidRequest, PaidResult } from "../src/kite/types.js";
 import { PayerError } from "../src/kite/types.js";
 import { formatAmount, overallScore, usdToMicro, SCORE_WEIGHTS } from "../src/money.js";
@@ -159,6 +159,46 @@ describe("budget ledger", () => {
     assert.equal(debitMicroForReceipt(0.01, receipt), usdToMicro(0.01));
     receipt.outcome = "replayed";
     assert.equal(debitMicroForReceipt(0.01, receipt), 0);
+  });
+
+  it("does not shrink the cap from unpaid receipts or a tiny planner budget", () => {
+    const observed = [0.016, 0.036, 0.086, 0.024];
+    const prior = observed.map((amount) => {
+      const receipt = blankReceipt({
+        tool: "search",
+        url: "https://agent402.tools/api/search?q=failed",
+        method: "GET",
+        outcome: "failed",
+        errorCode: "session_not_found",
+        listPriceUsd: amount,
+        detail: "No active session found for the given session ID",
+      });
+      receipt.prePayment = true;
+      receipt.spentTotal = amount.toFixed(3);
+      return receipt;
+    });
+    const rejected = blankReceipt({
+      tool: "answer",
+      url: "https://agent402.tools/api/answer",
+      method: "GET",
+      outcome: "skipped_budget",
+      errorCode: "planner_rejected",
+      listPriceUsd: 0.08,
+    });
+    const ledger = BudgetLedger.fromUsd(0.25, 0.05, 0.01);
+    for (const receipt of [...prior, rejected]) {
+      assert.equal(isUnchargedReceipt(receipt), true);
+      applyReceiptSpend(ledger, receipt.listPriceUsd ?? 0, receipt);
+    }
+    assert.equal(ledger.spentMicro, 0);
+    assert.equal(ledger.capUsd(), 0.25);
+    assert.equal(runCapUsd({ userBudgetUsd: 0.25, sessionMaxUsd: 0.25, sessionSpentUsd: 0 }), 0.25);
+    const withRealSpend = runCapUsd({ userBudgetUsd: 0.25, sessionMaxUsd: 0.25, sessionSpentUsd: 0.058 });
+    assert.equal(Math.round(withRealSpend * 1000) / 1000, 0.192);
+    for (const shrunk of observed) {
+      assert.notEqual(Math.round(withRealSpend * 1000) / 1000, shrunk);
+      assert.equal(ledger.capUsd() === shrunk, false);
+    }
   });
 
   it("keeps sub-cent prices exact", () => {

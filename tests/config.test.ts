@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { applyEnvFile, loadConfig, resolveMode, PROJECT_ROOT } from "../src/config.js";
+import { applyEnvFile, loadConfig, resolveKpassCwd, resolveMode, PROJECT_ROOT } from "../src/config.js";
 
 describe("mode", () => {
   it("stays in dry-run unless a SERV key and kpass are both available", () => {
@@ -36,12 +36,22 @@ describe("mode", () => {
     assert.equal(config.mode, "dry-run");
     assert.equal(config.criteria.budgetUsd, 0.25);
     assert.equal(config.kiteMaxPerTx, 0.05);
-    assert.equal(config.kpassCwd, PROJECT_ROOT);
+    assert.equal(config.kpassCwd, resolveKpassCwd(undefined, PROJECT_ROOT));
     const custom = loadConfig(
       { SCOUT_MODE: "dry-run", KPASS_CWD: "elsewhere" },
       { kpassExists: false, loadEnvFile: false, root: PROJECT_ROOT },
     );
     assert.equal(custom.kpassCwd, path.join(PROJECT_ROOT, "elsewhere"));
+  });
+
+  it("uses $HOME when the repo has no .kite-passport directory", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "scout-cwd-"));
+    const home = mkdtempSync(path.join(tmpdir(), "scout-home-"));
+    assert.equal(resolveKpassCwd(undefined, root, home), home);
+    assert.equal(resolveKpassCwd("", root, home), home);
+    mkdirSync(path.join(root, ".kite-passport"));
+    assert.equal(resolveKpassCwd(undefined, root, home), root);
+    assert.equal(resolveKpassCwd("/tmp/kite-custom", root, home), "/tmp/kite-custom");
   });
 
   it("rejects a non-positive budget and a per-tx cap above the budget", () => {

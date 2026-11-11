@@ -140,6 +140,8 @@ export interface SessionCreateOptions {
   runner?: CommandRunner;
   cwd?: string;
   wait: boolean;
+  /** Called after create returns and before the approval wait, so the URL can be shown immediately. */
+  onPending?: (info: SessionCreateInfo) => void;
 }
 
 export async function createKiteSession(opts: SessionCreateOptions): Promise<SessionCreateInfo> {
@@ -172,27 +174,17 @@ export async function createKiteSession(opts: SessionCreateOptions): Promise<Ses
       `kpass session create did not return JSON (exit ${created.code}): ${errorMessage(err)} ${errorMessage(new Error(created.stderr)).slice(0, 400)}`,
     );
   }
+  opts.onPending?.(info);
   if (!opts.wait) return info;
-  if (!info.requestId && !info.sessionId) return info;
-  if (info.sessionId && !info.requestId) return info;
-  const requestId = info.requestId;
-  if (!requestId) return info;
-  const status = await runner(
-    [
-      "session",
-      "status",
-      "--request-id",
-      requestId,
-      "--wait",
-      "--output",
-      "json",
-      "--no-interactive",
-      "--no-browser",
-    ],
-    { timeoutMs: 15 * 60 * 1000, cwd: opts.cwd },
-  );
+  if (!info.requestId || info.sessionId) return info;
   try {
-    const polled = parseSessionPayload(extractJson(status.stdout));
+    const polled = await fetchSessionStatus({
+      requestId: info.requestId,
+      bin: opts.bin,
+      runner,
+      cwd: opts.cwd,
+      wait: true,
+    });
     return {
       sessionId: polled.sessionId ?? info.sessionId,
       requestId: polled.requestId ?? info.requestId,
@@ -201,6 +193,27 @@ export async function createKiteSession(opts: SessionCreateOptions): Promise<Ses
   } catch {
     return info;
   }
+}
+
+/** `kpass session status --request-id`. `--wait --timeout 300` blocks until approval or 300s. */
+export async function fetchSessionStatus(opts: {
+  requestId: string;
+  bin?: string;
+  runner?: CommandRunner;
+  cwd?: string;
+  wait: boolean;
+}): Promise<SessionCreateInfo> {
+  const runner = opts.runner ?? spawnCommand(opts.bin ?? "kpass");
+  const args = ["session", "status", "--request-id", opts.requestId, "--output", "json", "--no-interactive", "--no-browser"];
+  if (opts.wait) args.push("--wait", "--timeout", "300");
+  const status = await runner(args, { timeoutMs: opts.wait ? 330_000 : 60_000, cwd: opts.cwd });
+  let parsed: unknown;
+  try {
+    parsed = extractJson(status.stdout);
+  } catch (err) {
+    throw new Error(`kpass session status did not return JSON: ${errorMessage(err)}`);
+  }
+  return parseSessionPayload(parsed);
 }
 
 export async function listActiveSessions(opts: {

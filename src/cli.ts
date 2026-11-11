@@ -4,10 +4,11 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, parseCategories, parseChains, parseEntryCost } from "./config.js";
 import { createKiteSession, listActiveSessions } from "./kite/kpass.js";
+import { activateStoredSession, readStoredSession, writeStoredSession } from "./kite/session-store.js";
 import { formatUsd } from "./money.js";
 import { createRuntime } from "./runtime.js";
 import { loadLastRun, renderDigestMarkdown } from "./scout/digest.js";
-import { errorMessage } from "./secrets.js";
+import { errorMessage, stripSecrets } from "./secrets.js";
 import { startServer } from "./server/app.js";
 import type { RunOverrides } from "./runtime.js";
 
@@ -133,6 +134,16 @@ async function cmdServe(argv: string[]): Promise<void> {
   if (values.port) process.env.PORT = values.port;
   if (values.host) process.env.HOST = values.host;
   const config = loadConfig();
+  if (config.mode === "live") {
+    const activated = await activateStoredSession({
+      dataDir: config.dataDir,
+      bin: config.kpassBin,
+      cwd: config.kpassCwd,
+      fallbackSessionId: config.kiteSessionId,
+    });
+    if (activated.sessionId) config.kiteSessionId = activated.sessionId;
+    else console.log("No session id yet. After approving, run: pnpm scout session status");
+  }
   startServer(config);
   console.log(`Bounty Scout dashboard (${config.mode}) at http://${config.host}:${config.port}`);
 }
@@ -163,6 +174,8 @@ async function cmdSession(argv: string[]): Promise<void> {
       console.log("The live command is: kpass session create --separate --max-amount-per-tx 0.05 --max-total-amount 0.25 --ttl 1h --assets USDC --no-browser --output json");
       return;
     }
+    const wait = values["no-wait"] !== true;
+    const createdAt = new Date().toISOString();
     const info = await createKiteSession({
       taskSummary: "Bounty Scout Agent: find and score crypto bounties within a $0.25 session budget",
       maxPerTx: config.kiteMaxPerTx,
@@ -171,18 +184,33 @@ async function cmdSession(argv: string[]): Promise<void> {
       assets: config.kiteAssets,
       bin: config.kpassBin,
       cwd: config.kpassCwd,
-      wait: values["no-wait"] !== true,
+      wait,
+      onPending: (pending) => {
+        writeStoredSession(config.dataDir, {
+          sessionId: null,
+          requestId: pending.requestId ?? null,
+          approvalUrl: pending.approvalUrl ?? null,
+          createdAt,
+        });
+        if (pending.approvalUrl) console.log(`Approve this session: ${pending.approvalUrl}`);
+        else console.log("kpass did not return an approval URL. Check that kpass is logged in (`kpass login`).");
+        if (wait && pending.requestId && !pending.sessionId) {
+          console.log("Waiting up to 300 seconds for approval. This stores the session key in .kite-passport.");
+        }
+      },
     });
-    const payload = {
+    writeStoredSession(config.dataDir, {
       sessionId: info.sessionId ?? null,
       requestId: info.requestId ?? null,
       approvalUrl: info.approvalUrl ?? null,
-      createdAt: new Date().toISOString(),
-    };
-    writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
-    if (info.approvalUrl) console.log(`Approve this session: ${info.approvalUrl}`);
-    if (info.sessionId) console.log(`Session id: ${info.sessionId}`);
-    else console.log("Session is not active yet. Re-run: pnpm scout session status");
+      createdAt,
+    });
+    if (info.sessionId) {
+      console.log(`Session id: ${info.sessionId}`);
+      console.log("Next: pnpm scout run --live --chains solana --budget 0.25 --entry free_or_gas --max-effort 30");
+    } else {
+      console.log("Approval is not stored yet. The request id is saved. After you approve, run: pnpm scout session status");
+    }
     console.log(`Wrote ${file}`);
     return;
   }
@@ -191,10 +219,32 @@ async function cmdSession(argv: string[]): Promise<void> {
     if (!config.kpassExists) {
       console.log("kpass is not on PATH. Status is available only for a local Passport login.");
       console.log(config.kiteSessionId ? `Configured session id: ${config.kiteSessionId}` : "No session id configured.");
+      console.log("Next, after kpass is installed and you are logged in: pnpm scout session create");
       return;
     }
+    const stored = readStoredSession(config.dataDir);
+    if (stored?.requestId && !stored.sessionId && !stored.dryRun) {
+      console.log("Checking approval and storing the session key.");
+      const activated = await activateStoredSession({
+        dataDir: config.dataDir,
+        bin: config.kpassBin,
+        cwd: config.kpassCwd,
+      });
+      if (activated.activated && activated.sessionId) {
+        console.log(`Session id: ${activated.sessionId}`);
+        console.log("Next: pnpm scout run --live --chains solana --budget 0.25 --entry free_or_gas --max-effort 30");
+        return;
+      }
+      console.log("The session is not active yet. Approve it in the browser, then run: pnpm scout session status");
+      if (stored.approvalUrl) console.log(`Approval URL: ${stored.approvalUrl}`);
+      return;
+    }
+    if (stored?.sessionId) {
+      console.log(`Session id: ${stored.sessionId}`);
+      console.log("Next: pnpm scout run --live --chains solana --budget 0.25 --entry free_or_gas --max-effort 30");
+    }
     const listed = await listActiveSessions({ bin: config.kpassBin, cwd: config.kpassCwd });
-    console.log(JSON.stringify(listed, null, 2));
+    console.log(JSON.stringify(stripSecrets(listed), null, 2));
     return;
   }
   throw new Error(`Unknown session command "${sub}". Use create or status.`);

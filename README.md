@@ -80,9 +80,15 @@ The $0.25 cap is for Agent402 only. Search caps default to 8 searches and 8 extr
 
 ## Troubleshooting
 
-`kpass` writes the session key into `.kite-passport/` in the working directory of the process that ran `kpass session create`. A later `kpass session execute` from any other directory returns `No active session found for the given session ID` even when `KITE_SESSION_ID` is correct. Nothing was paid; merchant status stays 0.
+`kpass` reads `.kite-passport/` from the working directory of the process. A login at `~/.kite-passport` is invisible if the command runs in the repo root, and a session created in the repo is invisible from `$HOME`. When `KPASS_CWD` is unset, this CLI uses the repo root if `.kite-passport/` is already there, and otherwise `$HOME`, so a normal `kpass login` is found. Set `KPASS_CWD` if you approved the session in some other directory. The directory is gitignored when it sits in the repo.
 
-This CLI spawns every `kpass` command (`session create`, `session status`, `session execute`) with `cwd` set to `KPASS_CWD`. The default is the repo root, and `.kite-passport/` there is gitignored. Create and execute then share one session file. If the session was approved from another directory, set `KPASS_CWD` to that directory and run again. The receipt for this mismatch is `failed` / `session_not_found`, the run stops, and the list price is not counted as spent.
+Approving the link is not enough by itself. `kpass` writes the per-session key only when `kpass session status --request-id <requestId>` runs after approval. `pnpm scout session create` waits up to 300 seconds and does that. If `data/session.json` still has `"sessionId": null`, or a paid call fails with `session_not_found` (`No active session found for the given session ID`) even though `kpass session list` shows an active id, run:
+
+```bash
+pnpm scout session status
+```
+
+That stores the session id and the local key. The receipt is `failed` / `session_not_found`, the run stops, and the list price is not counted as spent. The displayed cap stays the session max (or your budget, whichever is lower). Unpaid failures and planner rejections do not shrink it.
 
 ## Tool catalog
 
@@ -134,6 +140,7 @@ Set `SCOUT_DRY_RUN_DELAY_MS=200` if you want the receipt table to tick during a 
 ## Live
 
 ```bash
+# kpass login, then fund the Passport wallet
 cp .env.example .env
 # set OPENSERV_API_KEY, leave SCOUT_MODE=auto or set SCOUT_MODE=live
 pnpm scout session create
@@ -141,7 +148,7 @@ pnpm scout run --live --chains solana --budget 0.25 --entry free_or_gas --max-ef
 pnpm scout serve --live
 ```
 
-`session create` runs `kpass session create --separate` with the caps above, prints the approval URL, waits for the passkey approval, and writes the session id to `data/session.json` (gitignored). You can also set `KITE_SESSION_ID`. Without a session id, live `run` exits before any paid call.
+`session create` runs `kpass session create --separate` with the caps above, prints the approval URL immediately, then waits up to 300 seconds (`kpass session status --request-id … --wait --timeout 300`). That wait is what writes the session key. The session id lands in `data/session.json` (gitignored). If you stop the wait, the request id is kept; `pnpm scout session status` finishes activation. You can also set `KITE_SESSION_ID`. Without a session id, live `run` exits before any paid call and tells you to run `pnpm scout session status`.
 
 Auto mode (`SCOUT_MODE` unset or `auto`) is live only when a SERV key is present and `kpass` is on `PATH`. Otherwise it stays on fixtures. `--dry-run` always wins.
 
