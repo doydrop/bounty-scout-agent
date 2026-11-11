@@ -1,0 +1,32 @@
+{
+  "name": "bounty-scout-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Find and rank crypto bounties with SERV Reasoning, paying per research call through a Kite Passport session.",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "bounty-scout": "./bin/bounty-scout.js"
+  },
+  "scripts": {
+    "scout": "tsx src/cli.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "demo": "bash scripts/demo.sh",
+    "serve": "tsx src/cli.ts serve",
+    "start": "tsx src/cli.ts serve"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "hono": "^4.10.4",
+    "openai": "^6.8.1",
+    "tsx": "^4.20.6",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "typescript": "^5.9.3"
+  }
+}

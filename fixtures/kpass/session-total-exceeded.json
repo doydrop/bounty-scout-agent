@@ -1,0 +1,12 @@
+{
+  "status": "error",
+  "error_code": "session_total_exceeded",
+  "session_id": "sess_test",
+  "session_status": "exhausted",
+  "usage": { "spent_total": "0.25", "reserved_total": "0.00" },
+  "delegation": {
+    "payment_policy": { "max_amount_per_tx": "0.05", "max_total_amount": "0.25" }
+  },
+  "hint": "session total exceeded",
+  "agent_token": "REDACT_ME_FIXTURE"
+}

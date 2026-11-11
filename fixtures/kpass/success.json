@@ -1,0 +1,34 @@
+{
+  "session_id": "session_xyz789",
+  "session_status": "active",
+  "delegation": {
+    "task": { "summary": "Bounty Scout documentary envelope" },
+    "payment_policy": {
+      "max_amount_per_tx": "5.00",
+      "max_total_amount": "50.00"
+    }
+  },
+  "usage": {
+    "spent_total": "6.00",
+    "reserved_total": "0.00"
+  },
+  "payment_requirement": {
+    "asset": "USDC",
+    "amount": "1.00"
+  },
+  "x402": {
+    "status_code": 200,
+    "response_body": "{\"ok\":true}",
+    "parsed_response_body": { "ok": true },
+    "wallet_address": "0xabc123",
+    "chain_id": 8453
+  },
+  "payment": {
+    "payment_response": { "reference": "0xdocumentary" }
+  },
+  "agent_token": "REDACT_ME_FIXTURE",
+  "_version": "1",
+  "status": "success",
+  "hint": "x402 request completed with HTTP 200.",
+  "next_command": ""
+}
