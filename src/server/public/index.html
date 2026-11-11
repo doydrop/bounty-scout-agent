@@ -374,7 +374,7 @@
             receipt.paidAmount || "",
             receipt.spentTotal || "",
             `${receipt.outcome}${receipt.merchantStatus ? " " + receipt.merchantStatus : ""}`,
-            receipt.txReference || receipt.errorCode || receipt.detail || "",
+            [receipt.txReference, receipt.errorCode, receipt.detail].filter(Boolean).join(" · "),
           ];
           cells.forEach((value, index) => {
             const td = el("td", value);

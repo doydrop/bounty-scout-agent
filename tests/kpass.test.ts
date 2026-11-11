@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
-import { KpassCliPayer, createKiteSession } from "../src/kite/kpass.js";
+import { KpassCliPayer, createKiteSession, listActiveSessions, spawnCommand } from "../src/kite/kpass.js";
 import type { CommandRunner } from "../src/kite/types.js";
 import { PassportHttpPayer } from "../src/kite/http.js";
 
@@ -14,8 +16,13 @@ describe("kpass CLI payer", () => {
       seen.push(args);
       return { stdout: success, stderr: "", code: 0 };
     };
-    const payer = new KpassCliPayer({ sessionId: "sess_live", runner });
-    const result = await payer.execute({
+    let seenCwd: string | undefined;
+    const wrapped: CommandRunner = async (args, opts) => {
+      seenCwd = opts.cwd;
+      return runner(args, opts);
+    };
+    const paying = new KpassCliPayer({ sessionId: "sess_live", runner: wrapped, cwd: "/repo" });
+    const result = await paying.execute({
       url: "https://agent402.tools/api/search?q=Solana%20bounty",
       method: "GET",
       idempotencyKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -33,6 +40,7 @@ describe("kpass CLI payer", () => {
     assert.equal(args.join(" ").includes("OPENSERV_API_KEY"), false);
     assert.equal(result.receipt.outcome, "paid");
     assert.equal(result.receipt.chainId, 8453);
+    assert.equal(seenCwd, "/repo");
   });
 
   it("sends POST body and headers as JSON argv values", async () => {
@@ -74,13 +82,19 @@ describe("kpass CLI payer", () => {
         code: 0,
       };
     };
+    const cwds: Array<string | undefined> = [];
+    const recording: CommandRunner = async (args, opts) => {
+      cwds.push(opts.cwd);
+      return runner(args, opts);
+    };
     const info = await createKiteSession({
       taskSummary: "Bounty Scout",
       maxPerTx: 0.05,
       maxTotal: 0.25,
       ttl: "1h",
       assets: "USDC",
-      runner,
+      runner: recording,
+      cwd: "/repo",
       wait: true,
     });
     const create = seen[0] ?? [];
@@ -91,6 +105,26 @@ describe("kpass CLI payer", () => {
     assert.equal(create.includes("--no-browser"), true);
     assert.equal(info.sessionId, "sess_approved");
     assert.match(info.approvalUrl ?? "", /approve\?token=/);
+    assert.deepEqual(cwds, ["/repo", "/repo"]);
+  });
+
+  it("lists sessions from the same cwd", async () => {
+    let cwd: string | undefined;
+    const runner: CommandRunner = async (args, opts) => {
+      cwd = opts.cwd;
+      assert.equal(args[1], "list");
+      return { stdout: "{\"sessions\":[]}", stderr: "", code: 0 };
+    };
+    await listActiveSessions({ runner, cwd: "/repo" });
+    assert.equal(cwd, "/repo");
+  });
+
+  it("spawns the child with cwd so .kite-passport is shared", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "kpass-cwd-"));
+    const runner = spawnCommand(process.execPath);
+    const result = await runner(["-e", "process.stdout.write(process.cwd())"], { timeoutMs: 5000, cwd: dir });
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, dir);
   });
 });
 

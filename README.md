@@ -59,9 +59,9 @@ kpass session execute \
 
 Arguments are passed as an argv array. The merchant method is always set. Agent402 GET routes fail if the CLI's default POST is left in place. The idempotency key is a new UUID per payment.
 
-The receipt uses `x402.status_code` as the merchant status, `payment_requirement.amount` as the amount actually paid, and `usage.spent_total` when Passport returns it. The local ledger is what the cap is enforced against, because a failed attempt still counts.
+The receipt uses `payment.status_code` or `x402.status_code` as the merchant status, `payment.transaction_hash` when that is the tx reference, `payment_requirement.amount` as the amount actually paid, and `usage.spent_total` when Passport returns it. The local ledger is what the cap is enforced against. A settled failure still counts. A `kpass` error that arrives before any `payment` or `usage` object does not.
 
-Spending stops on `session_total_exceeded`, `separate_session_used_up`, `insufficient_balance`, `wallet_empty`, `payment_cap_exceeded`, and `session_expired`. A `merchant_failed_held` result is recorded as failed and is not retried with a new key.
+Spending stops on `session_total_exceeded`, `separate_session_used_up`, `insufficient_balance`, `wallet_empty`, `payment_cap_exceeded`, `session_expired`, and `session_not_found`. A `merchant_failed_held` result is recorded as failed and is not retried with a new key.
 
 `PassportHttpPayer` (`KITE_PAYER=http`) is experimental. [Kite's API reference](https://docs.gokite.ai/api-reference) says agents should use the CLI and that there is no public HTTP API yet. Do not use it for the demo. Passport skills to read alongside this repo: [gokite-ai/passport-skills](https://github.com/gokite-ai/passport-skills) (`x402-execute`, `request-session`).
 
@@ -71,11 +71,18 @@ Default budget is **$0.25**. Default slack is **$0.01**. Before a call is sent:
 
 - if `listPrice + slack > remaining`, the call is `skipped_budget` and the payer is not invoked
 - if `listPrice` is above the per-transaction cap (default $0.05), same refusal
-- a failed or thrown attempt debits the receipt amount, or the list price when the receipt has no amount
+- a settled failure debits the receipt amount; a timeout or unparsable `kpass` result debits the list price
+- a `kpass` error with no `payment` and no `usage` is not debited (`kpass_error`, or `session_not_found`, which also stops the run)
 - replays and budget skips debit nothing
 - `/api/answer` ($0.08) is off unless `SCOUT_ALLOW_ANSWER=true`, and the $0.05 per-tx cap blocks it anyway
 
 The $0.25 cap is for Agent402 only. Search caps default to 8 searches and 8 extracts. The whole run aborts spending after 8 minutes.
+
+## Troubleshooting
+
+`kpass` writes the session key into `.kite-passport/` in the working directory of the process that ran `kpass session create`. A later `kpass session execute` from any other directory returns `No active session found for the given session ID` even when `KITE_SESSION_ID` is correct. Nothing was paid; merchant status stays 0.
+
+This CLI spawns every `kpass` command (`session create`, `session status`, `session execute`) with `cwd` set to `KPASS_CWD`. The default is the repo root, and `.kite-passport/` there is gitignored. Create and execute then share one session file. If the session was approved from another directory, set `KPASS_CWD` to that directory and run again. The receipt for this mismatch is `failed` / `session_not_found`, the run stops, and the list price is not counted as spent.
 
 ## Tool catalog
 

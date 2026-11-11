@@ -8,6 +8,7 @@ export function spawnCommand(bin: string): CommandRunner {
   return (args, opts) =>
     new Promise((resolve, reject) => {
       const child = spawn(bin, args, {
+        cwd: opts.cwd,
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
@@ -69,6 +70,8 @@ export class KpassCliPayer implements KitePayer {
       sessionId: string;
       runner?: CommandRunner;
       capUsd?: number;
+      /** Directory that holds `.kite-passport/` for this session. */
+      cwd?: string;
     },
   ) {}
 
@@ -107,7 +110,7 @@ export class KpassCliPayer implements KitePayer {
     if (req.body !== undefined && req.method !== "GET") {
       args.push("--body", JSON.stringify(req.body));
     }
-    const result = await this.runner()(args, { timeoutMs: EXECUTE_TIMEOUT_MS });
+    const result = await this.runner()(args, { timeoutMs: EXECUTE_TIMEOUT_MS, cwd: this.opts.cwd });
     let parsed: unknown;
     try {
       parsed = extractJson(result.stdout);
@@ -135,6 +138,7 @@ export interface SessionCreateOptions {
   assets: string;
   bin?: string;
   runner?: CommandRunner;
+  cwd?: string;
   wait: boolean;
 }
 
@@ -159,7 +163,7 @@ export async function createKiteSession(opts: SessionCreateOptions): Promise<Ses
     "--output",
     "json",
   ];
-  const created = await runner(args, { timeoutMs: 120_000 });
+  const created = await runner(args, { timeoutMs: 120_000, cwd: opts.cwd });
   let info: SessionCreateInfo = {};
   try {
     info = parseSessionPayload(extractJson(created.stdout));
@@ -185,7 +189,7 @@ export async function createKiteSession(opts: SessionCreateOptions): Promise<Ses
       "--no-interactive",
       "--no-browser",
     ],
-    { timeoutMs: 15 * 60 * 1000 },
+    { timeoutMs: 15 * 60 * 1000, cwd: opts.cwd },
   );
   try {
     const polled = parseSessionPayload(extractJson(status.stdout));
@@ -202,11 +206,12 @@ export async function createKiteSession(opts: SessionCreateOptions): Promise<Ses
 export async function listActiveSessions(opts: {
   bin?: string;
   runner?: CommandRunner;
+  cwd?: string;
 }): Promise<unknown> {
   const runner = opts.runner ?? spawnCommand(opts.bin ?? "kpass");
   const result = await runner(
     ["session", "list", "--status", "active", "--output", "json", "--no-interactive", "--no-browser"],
-    { timeoutMs: 60_000 },
+    { timeoutMs: 60_000, cwd: opts.cwd },
   );
   try {
     return extractJson(result.stdout);

@@ -18,7 +18,7 @@ Bounty Scout uses a **separate Kite Passport spending session**, not a raw walle
 - 1 hour TTL
 - USDC
 
-Every paid lookup goes through `kpass session execute` with an idempotency key. The CLI wrapper does not interpolate the command in a shell. If the session is exhausted, expired, or the next list price plus a $0.01 slack would exceed what is left, the process stops spending and still scores what it already has. Failed attempts count against the cap, because a settled failure still costs money.
+Every paid lookup goes through `kpass session execute` with an idempotency key. The CLI wrapper does not interpolate the command in a shell, and it always uses the same working directory (`KPASS_CWD`, default the repo root) so the `.kite-passport/` session created by `kpass session create` is the one `execute` reads. If the session is exhausted, expired, missing from that directory, or the next list price plus a $0.01 slack would exceed what is left, the process stops spending and still scores what it already has. A settled failure counts against the cap. A `kpass` error that returns before any payment does not.
 
 That receipt table is the product: time, tool, URL, list price, amount actually paid, running total, merchant status, and a transaction reference when Passport returns one.
 
@@ -74,6 +74,8 @@ Effort is higher when the task fits the time cap. Cost is higher when entry is c
 This repository is the hackathon implementation: the SERV client, the Kite CLI payer, the budget gate, the Agent402 catalog, the scout loop, the CLI, the dashboard, dry-run fixtures, and tests. Dry-run is the default so the project runs without a key. Live mode is the same code path with the real clients.
 
 A recorded dry-run spends $0.076 of the $0.25 cap and ranks four fixture listings. One scam-pattern listing is dropped. `/api/answer` is refused before any payment.
+
+A real live run after the session-directory fix, `pnpm scout run --live --chains solana --budget 0.2 --entry free_or_gas --max-effort 30`, paid 6 Agent402 calls for $0.04 and ranked 5 results.
 
 ## Demo and posts
 

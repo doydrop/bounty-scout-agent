@@ -36,6 +36,12 @@ describe("mode", () => {
     assert.equal(config.mode, "dry-run");
     assert.equal(config.criteria.budgetUsd, 0.25);
     assert.equal(config.kiteMaxPerTx, 0.05);
+    assert.equal(config.kpassCwd, PROJECT_ROOT);
+    const custom = loadConfig(
+      { SCOUT_MODE: "dry-run", KPASS_CWD: "elsewhere" },
+      { kpassExists: false, loadEnvFile: false, root: PROJECT_ROOT },
+    );
+    assert.equal(custom.kpassCwd, path.join(PROJECT_ROOT, "elsewhere"));
   });
 
   it("rejects a non-positive budget and a per-tx cap above the budget", () => {

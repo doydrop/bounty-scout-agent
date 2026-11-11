@@ -1,0 +1,30 @@
+{
+  "status": "success",
+  "session_id": "sess_live_fixture",
+  "usage": {
+    "spent_total": "0.008"
+  },
+  "payment": {
+    "status_code": 200,
+    "transaction_hash": "0xlivefixturetx",
+    "network": "eip155:8453"
+  },
+  "payment_requirement": {
+    "amount": "0.008",
+    "asset": "USDC"
+  },
+  "delegation": {
+    "payment_policy": {
+      "max_total_amount": "0.25"
+    }
+  },
+  "x402": {
+    "chain_id": 2366,
+    "parsed_response_body": {
+      "query": "solana bounty",
+      "count": 1,
+      "results": [],
+      "untrustedContent": true
+    }
+  }
+}

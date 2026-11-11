@@ -58,10 +58,16 @@ export function renderDigestMarkdown(digest: Digest, receipts: SpendReceipt[]): 
     const legitimacy = item.legitimacy === undefined ? "" : ` (legitimacy ${item.legitimacy})`;
     lines.push(`- ${linkTitle(item.title)} — ${item.url}${legitimacy}: ${item.reason}`);
   }
-  lines.push("", "## Receipts", "", "| Time | Tool | Outcome | List | Paid | Running total | Status | Tx |", "| --- | --- | --- | --- | --- | --- | --- | --- |");
+  lines.push(
+    "",
+    "## Receipts",
+    "",
+    "| Time | Tool | Outcome | List | Paid | Running total | Status | Code | Detail |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  );
   for (const receipt of receipts) {
     lines.push(
-      `| ${mdCell(receipt.ts)} | ${mdCell(receipt.tool)} | ${receipt.outcome} | ${receipt.listPriceUsd ?? ""} | ${receipt.paidAmount ?? ""} | ${receipt.spentTotal ?? ""} | ${receipt.merchantStatus ?? ""} | ${mdCell(receipt.txReference ?? receipt.errorCode ?? "")} |`,
+      `| ${mdCell(receipt.ts)} | ${mdCell(receipt.tool)} | ${receipt.outcome} | ${receipt.listPriceUsd ?? ""} | ${receipt.paidAmount ?? ""} | ${receipt.spentTotal ?? ""} | ${receipt.merchantStatus ?? ""} | ${mdCell(receipt.errorCode ?? receipt.txReference ?? "")} | ${mdCell(receipt.detail ?? "")} |`,
     );
   }
   lines.push(
