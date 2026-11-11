@@ -75,14 +75,43 @@ This repository is the hackathon implementation: the SERV client, the Kite CLI p
 
 A recorded dry-run spends $0.076 of the $0.25 cap and ranks four fixture listings. One scam-pattern listing is dropped. `/api/answer` is refused before any payment.
 
-A real live run after the session-directory fix, `pnpm scout run --live --chains solana --budget 0.2 --entry free_or_gas --max-effort 30`, paid 6 Agent402 calls for $0.04 and ranked 5 results.
+### Live runs (11 November 2026, real Kite Passport session)
+
+Both runs used one passkey-approved session: $0.05 per transaction, $0.25 total, USDC on Base. Payments went to Agent402 through `kpass session execute`.
+
+**Run 1.** `pnpm scout run --live --chains solana --budget 0.2 --entry free_or_gas --max-effort 30`
+
+- 6 paid calls for $0.04: `search-lite` 2 × $0.008, `meta` 2 × $0.002, `extract` 2 × $0.01.
+- 5 ranked results, 4 dropped for legitimacy or missing scores.
+- Top results: Superteam Earn Bounties (8.40), Superteam Earn (8.15), Stocklana Solana hackathon (5.70), MLH Solana Hackathon (5.45), Grabs.gg create contest (5.40).
+
+**Run 2 (recorded for the demo).** Same command.
+
+- 2 paid calls for $0.01: `search-lite` $0.008 and `meta` $0.002.
+- 6 calls refused before any payment. `/api/answer` ($0.08) was rejected by the planner, `search-news` was stopped by the budget gate as `over_budget`, and four extra `meta` lookups were rejected by the planner as unnecessary.
+- 3 ranked results: Superteam Earn (7.80), MLH Solana Hackathon (7.55), Solana Global Creator Competition (6.40). 2 dropped.
+
+The whole session spent $0.058 of its $0.25 cap. That includes $0.016 from two debugging calls made before the `KPASS_CWD` fix in [PR #2](https://github.com/doydrop/bounty-scout-agent/pull/2).
+
+## Quick start
+
+```bash
+pnpm install
+pnpm scout run                  # dry-run, no key needed
+pnpm scout serve --port 8787    # local dashboard
+
+# live mode: OPENSERV_API_KEY, kpass on PATH, and an approved session
+pnpm scout session create
+pnpm scout run --live --chains solana --budget 0.2 --entry free_or_gas --max-effort 30
+```
 
 ## Demo and posts
 
-- Demo video: add the URL here before submitting.
-- X post: add the URL here before submitting.
+- Repo: https://github.com/doydrop/bounty-scout-agent
+- Demo video: _TODO, add the public URL before submitting._
+- X post: _TODO, add the URL before submitting._
 - Submission form: https://openserv.typeform.com/submissions02
-- Deadline: 15 November 2026, 23:59 UTC.
+- Deadline: 15 November 2026, 23:59 UTC (16 November, 06:59 WIB).
 
 Draft post, not published from this repo:
 
@@ -99,4 +128,4 @@ The free path is a daily digest inside a small research budget. Paid versions ca
 - Sessions expire (the demo TTL is one hour) and passkey approval is manual.
 - Scores can be wrong. Legitimacy is a filter, not a guarantee.
 - Dry-run listings are fixtures so the demo and the tests are deterministic. A live session is required before the numbers are real bounties.
-- Next: record a live session under $0.15, publish the demo, and post the repo.
+- Next: a hosted daily digest, more sources beyond Agent402, and a guarded "apply" action.
